@@ -1,0 +1,216 @@
+# Implementation Plan: Task Manager with Focus Timer
+
+**Branch**: `001-task-focus-timer` | **Date**: 2026-08-14 | **Spec**: [spec.md](spec.md)
+
+**Input**: Feature specification from `/specs/001-task-focus-timer/spec.md`
+
+## Summary
+
+A single-user Go CLI, `pomotask`, offering exactly three commands: record a task, mark a task
+complete, and run a fixed 25-minute focus interval. Task state persists to one local JSON file
+through a dedicated persistence package using only the standard library, as
+[ADR 0001](../../adr/0001-persist-tasks-to-local-json.md) requires.
+
+The design turns on three decisions. Persistence is a package boundary rather than an
+interface, because depguard enforces it at build time and nothing varies behind it. The
+interval takes a single tick parameter from which its total length is derived, which makes
+FR-016's "one source" structural rather than a matter of discipline. And unreadable stored data
+fails loudly and leaves the file untouched, which is the only one of ADR 0001's three candidate
+behaviors that needs no machinery beyond what other requirements already demand.
+
+## Technical Context
+
+**Language/Version**: Go 1.26
+
+**Primary Dependencies**: Go standard library only, for everything that ships. `golangci-lint`
+with `depguard` is development and CI tooling, which the Constitution states is not an
+application runtime dependency.
+
+**Storage**: One local JSON file carrying `schema_version` and `tasks`. Path passed into the
+persistence package; `main` resolves the default under `os.UserConfigDir()`.
+
+**Testing**: `go test`. Persistence tests use `t.TempDir()`. Interval tests drive the tick seam
+rather than waiting.
+
+**Target Platform**: Cross-platform CLI — Windows, macOS, Linux. Developed on Windows 11.
+
+**Project Type**: Single project, command-line tool.
+
+**Performance Goals**: Confirmation of an add visible in under one second (SC-001). Interval
+length accurate to within one second (SC-004).
+
+**Constraints**: Persistence confined to one package, standard library only. Domain logic must
+not import `encoding/json` and must not touch the filesystem. No user-facing means of changing
+the interval duration. No third-party application dependency without developer approval.
+
+**Scale/Scope**: One user, one machine, a task set small enough that whole-file reads and
+writes stay acceptable. Sixteen functional requirements, eight success criteria, three commands.
+
+## Constitution Check
+
+*GATE: evaluated before Phase 0, re-evaluated after Phase 1 design. Both passes recorded.*
+
+| Principle | Gate | Pre-design | Post-design |
+|-----------|------|-----------|-------------|
+| I. ADR Authority | All ADRs in `adr/` read; Accepted ones treated as binding | Pass — ADR 0001 read in full; the two decisions it defers are settled in research.md R1 and R2, not assumed | Pass — no design element conflicts with it; nothing required a superseding ADR |
+| II. Approved Persistence | Single local JSON file; stdlib only; dedicated package; domain free of `encoding/json` and filesystem access | Pass | Pass — `internal/storage` is the sole importer of `encoding/json`; neither `internal/task` nor `internal/focus` imports it or any filesystem package, and depguard rule 2 makes that a build error rather than a review finding (research.md R8, R9) |
+| III. Traceable Decisions | Every plan decision cites a spec requirement or an Accepted ADR | Pass | Pass — every entry in research.md carries its authority; the five choices resting on neither are named in the Gap register below, and two further conventions are recorded at their point of use, rather than any of them being passed off as requirements |
+| IV. Standard-Library-First | Stdlib by default; errors wrapped, never discarded; no panic for expected failures; doc comments on exported identifiers; gofmt, go vet, golangci-lint clean | Pass | Pass — no third-party import proposed; failure paths return errors, including the load failures that would be easiest to swallow |
+| V. Necessary Simplicity | Only what the spec or an Accepted ADR requires; no speculative abstraction; interfaces only for required boundaries | Pass | Pass — no interface introduced (R8), no injected clock (R6), no flag parser for a CLI with no flags (R10), no `next_id` field (R3), no backup mechanism (R2) |
+| Testing & Enforcement | Automated coverage for every testable behavior; isolated temp locations; CI-verified architecture; depguard; behavioral persistence check | Pass | Pass — two depguard rules: one barring alternative backends inside `internal/storage`, one holding `internal/task` and `internal/focus` clear of serialization, filesystem, storage, and signal imports. Behavioral check entered through `run`, not through the storage package. See Verification strategy |
+
+**No violations. Complexity Tracking is therefore omitted, as the template directs.**
+
+## Project Structure
+
+### Documentation (this feature)
+
+```text
+specs/001-task-focus-timer/
+├── plan.md              # This file
+├── spec.md              # Feature specification
+├── research.md          # Phase 0 — ten decisions with their authorities
+├── data-model.md        # Phase 1 — domain type, persisted document, transitions
+├── quickstart.md        # Phase 1 — how to run and validate
+├── contracts/
+│   └── cli.md           # Phase 1 — invocation, exit statuses, streams
+└── checklists/
+    └── requirements.md  # Spec quality checklist, 16/16
+```
+
+### Source Code (repository root)
+
+```text
+cmd/pomotask/
+├── main.go              # Resolves the default path, calls run, exits once
+└── main_test.go         # Drives run end to end; carries the ADR 0001 behavioral check
+
+internal/task/
+├── task.go              # Task type; Add and Complete as pure functions
+└── task_test.go
+
+internal/storage/
+├── store.go             # Load and save; the only importer of encoding/json
+└── store_test.go        # Uses t.TempDir()
+
+internal/focus/
+├── focus.go             # Interval driven by a tick duration and a context; total = 25 × tick
+└── focus_test.go        # Cancels the context directly; no signals involved
+
+.golangci.yml            # depguard: backends barred in storage; purity in task and focus
+.github/workflows/ci.yml # gofmt, go vet, golangci-lint, go test
+```
+
+**Structure Decision**: A single Go module laid out conventionally — `cmd/` for the entry point,
+`internal/` for packages that are not a public API. The three internal packages are not an
+arbitrary split: `storage` exists because ADR 0001 requires a dedicated persistence package and
+gives depguard a scope to bind to, `task` exists because the same ADR forbids domain logic from
+importing `encoding/json`, and `focus` exists because FR-014 requires the interval to touch no
+task data, which is easiest to guarantee when it cannot reach it.
+
+The template's `src/models`, `src/services`, `src/cli` layout is not used; it is not the Go
+convention and would place the persistence boundary somewhere depguard cannot cleanly address.
+
+**`main` is a wrapper around a testable `run`.** `func main()` resolves the default data path,
+calls `run(args []string, dataPath string, stdout, stderr io.Writer) int`, and passes the
+returned code to `os.Exit` at the single exit point. Everything else — dispatch, load, domain
+operation, save, message text, exit status — lives inside `run`, which a test can call directly
+with `t.TempDir()` and captured buffers.
+
+This is what makes ADR 0001's behavioral check the check the ADR actually describes. That check
+must invoke "the add-task path", not the storage package: a test that calls `storage.Save`
+directly proves the storage package writes valid JSON, and proves nothing about whether the
+application reaches it. Only a test entering through `run` shows that adding a task, as a user
+would, is what produces the file. The check therefore lives in `cmd/pomotask/main_test.go`.
+
+The same seam gives the exit-status and stream assertions of SC-005 and SC-008 a home, since
+those are properties of the command, not of any single package.
+
+## Verification strategy
+
+Constitution requirements, and what satisfies each:
+
+| Requirement | Satisfied by |
+|-------------|--------------|
+| Automated coverage for every testable spec behavior | Unit tests per package, mapped to FRs; CLI-level tests for exit statuses and stream discipline (SC-005, SC-008) |
+| Persistence tests isolated from real user data | `t.TempDir()` throughout `internal/storage`; the path is a parameter, so no test can reach the real file even by accident (research.md R1) |
+| Architectural constraints verified by CI, not review | `.golangci.yml` and the workflow, both run on every push. The workflow must test `gofmt -l` by its **output**, not its exit code — `gofmt -l` exits zero even when it names unformatted files, so a naive `&&` chain would report a clean build over unformatted code |
+| Dependency restriction enforced with depguard | Two rules, described below |
+| Approved JSON path verified behaviorally | A test in `cmd/pomotask/main_test.go` entering through `run` against a temporary directory and decoding the resulting file into a document carrying `schema_version` and `tasks` |
+| SC-001 — confirmation in under one second | The same `run`-level add test asserts the call returns within one second against a warm temporary directory |
+
+### The two depguard rules
+
+Constitution states two separate architectural constraints, and both say architecture is
+verified by CI rather than by review. One rule cannot carry both, because they are scoped to
+different packages.
+
+**Rule 1 — no alternative persistence backend.** Scoped to `internal/storage`. An allowlist
+permitting only `$gostd`, with explicit denials for `database/sql`, SQLite drivers, ORMs,
+key-value stores, and remote storage SDKs. Each denial carries a description naming ADR 0001, so
+a violation reports the governing decision rather than an anonymous lint error. An allowlist is
+used rather than a blocklist because it closes every dependency path not explicitly opened.
+
+**Rule 2 — domain purity.** Scoped to `internal/task` **and `internal/focus`**. Denies
+`encoding/json` and the filesystem packages — `os`, `io/fs`, `path/filepath` — in both, plus
+two further denials in `internal/focus`:
+
+- **`internal/storage`**, which is what turns FR-014 from a promise into a build error. FR-014
+  requires the interval to neither read nor modify task data; denying it the persistence package
+  means it cannot, rather than merely does not.
+- **`os/signal`**, which keeps signal handling in `cmd/pomotask` where the process lives. The
+  interval accepts a `context.Context` and ends when it is cancelled, indifferent to why. That
+  keeps its tests free of signal delivery — cancelling a context is deterministic, sending
+  SIGINT to a test process is not — and leaves one place in the codebase that knows about
+  signals.
+
+Constitution requires that domain logic neither import `encoding/json` nor perform filesystem
+operations directly, and without this rule that requirement rests on review alone, which the
+same document rules out as insufficient evidence of compliance. Rule 1 says nothing about any of
+it: a domain package importing `encoding/json` introduces no alternative persistence backend and
+passes rule 1 untouched.
+
+ADR 0001 requires both a negative and a positive check and treats neither as a substitute for
+the other. The rules above are the negative half: they prove no prohibited dependency was
+introduced. The behavioral check is the positive half: it proves the approved path is the one
+actually taken. A build can satisfy every dependency rule while never writing a file at all.
+
+### Coverage of the timing criteria
+
+SC-007's count of 25 reports and FR-012's sequence are tested through the tick seam. SC-004's
+one-second accuracy is checked against the production tick in the manual quickstart run, since
+that is the one property a compressed interval cannot demonstrate.
+
+SC-001's one-second bound is asserted at the `run` level rather than measured precisely. Machine
+and CI timing vary too much for a sub-second assertion to mean anything exact; what the check
+does catch is a regression that changes the order of magnitude — a stray sleep, a retry loop, or
+a read that stops being proportional to a small file. Recorded as a smoke bound, not a
+benchmark.
+
+## Gap register
+
+Constitution Principle III requires surfacing choices that neither the specification nor an
+Accepted ADR authorizes, rather than deciding them silently. Five qualify. All are recorded in
+the artifacts that depend on them and none blocks implementation, but each is the developer's to
+overturn.
+
+| # | Choice made | Why it is a gap | Where it lives |
+|---|-------------|-----------------|----------------|
+| G1 | `pomotask done <id>` on an already-complete task exits `0` | FR-008 requires the no-op be reported and nothing changed, but assigns no exit status. Exiting `0` reads it as "the requested state holds"; exiting non-zero would read it as a rejected operation. Both are defensible and FR-015 is satisfied either way, since the message does not claim the operation took effect | [contracts/cli.md](contracts/cli.md) |
+| G2 | Interruption reports elapsed time in whole minutes | FR-013 requires printing "how much time had elapsed" without fixing the granularity. Whole minutes keeps the figure consistent with FR-012's countdown and testable under a compressed tick; exact elapsed time would be truthful to the second but would print milliseconds in tests | [contracts/cli.md](contracts/cli.md) |
+| G3 | Interruption exits `1` rather than the shell convention `130` | SC-008 requires only that completion and interruption be distinguishable. Nothing selects a particular value | [research.md](research.md) R7 |
+| G4 | `pomotask add` takes exactly one argument; the remainder is not joined | FR-001 requires the text be supplied "in a single command" and says nothing about argument count. Requiring one argument makes the contract crisp, and its failure message prints the quoting form rather than a generic usage line, but it rejects `pomotask add write the report`, which many users will type first. Joining the remainder would accept it, at the cost of a looser contract and of `add` silently normalizing runs of spaces | [contracts/cli.md](contracts/cli.md) |
+| G5 | An interrupted interval prints to stdout and is not counted as an SC-005 failure, despite exiting non-zero | SC-005 binds "every operation the system rejects or cannot complete", and an interrupted interval did not complete — so it arguably falls inside, which would put the message on stderr alongside every other non-zero exit. The contract instead reads interruption as the user getting what they asked for rather than a fault, and routes it to stdout. Nothing in the spec settles which reading is right. The cost of the choice is that "non-zero implies stderr" stops being a rule a test can assert uniformly | [contracts/cli.md](contracts/cli.md) |
+
+Two further choices rest on convention rather than requirement and are recorded at their point
+of use rather than here: failure messages on stderr (research.md R10), and storing task data
+under `os.UserConfigDir()` despite tasks being data rather than configuration (research.md R1,
+including why the semantically better alternative was rejected).
+
+## Phase status
+
+- **Phase 0** — complete. [research.md](research.md), ten decisions, no `NEEDS CLARIFICATION`
+  outstanding.
+- **Phase 1** — complete. [data-model.md](data-model.md), [contracts/cli.md](contracts/cli.md),
+  [quickstart.md](quickstart.md).
+- **Phase 2** — not started. `tasks.md` is produced by `/speckit-tasks`, not by this command.
