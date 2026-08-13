@@ -127,8 +127,10 @@ covers crash durability, and none will be written.
 
 ## R6. Making the interval testable without waiting 25 minutes
 
-**Authority**: FR-016 — duration and reporting cadence MUST be driven from one source, and the
-seam MUST NOT be reachable from the user-facing surface FR-011 bounds. SC-004, SC-007.
+**Authority**: FR-016, first seam — duration and reporting cadence MUST be driven from one
+source, and the seam MUST NOT be reachable from the user-facing surface FR-011 bounds.
+FR-012, SC-007. Not SC-004: FR-016 excludes it, because compressing the interval removes the
+very wall-clock property SC-004 asserts.
 
 **Decision**: The interval is defined as 25 ticks. The tick duration is the single parameter.
 Total length is derived as `25 × tick`, never supplied separately. Production passes
@@ -149,8 +151,8 @@ checked at speed — precisely the untestable state FR-016 exists to prevent.
 **Alternatives considered**:
 
 - Separate `duration` and `interval` parameters. Permits the exact mismatch FR-016 names as a
-  trap: a shortened duration still reporting once per real minute, leaving SC-004 green while
-  FR-012's sequence goes untested. Rejected.
+  trap: a shortened duration still reporting once per real minute, leaving a total-length check
+  green while FR-012's sequence goes untested. Rejected.
 - An injected clock interface. More general, and none of that generality is required. Rejected
   under Principle V — the tick parameter is sufficient.
 
@@ -158,15 +160,19 @@ checked at speed — precisely the untestable state FR-016 exists to prevent.
 
 ## R7. Interruption and exit status
 
-**Authority**: FR-013 — print elapsed time, exit non-zero, no confirmation prompt. FR-012 —
+**Authority**: FR-016, second seam — an interrupted interval MUST be reachable by cancelling
+something a test can hold, not only by signalling the process. FR-013 — print elapsed time,
+exit non-zero, no confirmation prompt. SC-008. FR-012 —
 exit zero on completion. SC-008.
 
 **Decision**: `signal.NotifyContext` with `os.Interrupt` produces a context cancelled on Ctrl-C.
-The wiring lives in `cmd/pomotask`; `internal/focus` accepts a `context.Context` and ends when
-it is cancelled, without importing `os/signal` — a constraint enforced by depguard rule 2 rather
-than left to discipline. On cancellation the command prints the elapsed time and returns exit
-code 1. Normal completion returns 0. `main` calls `os.Exit` at exactly one place, so no deferred
-cleanup is skipped.
+The wiring lives in `func main()` and nowhere else. Both `run` and `internal/focus` accept a
+`context.Context` and end when it is cancelled, neither importing `os/signal` — a constraint
+depguard rule 2 enforces on the focus package rather than leaving it to discipline. Neither
+learns why cancellation happened, which is what lets a test cancel by ordinary function call
+instead of by signalling its own process. On cancellation the command prints the elapsed time
+and returns exit code 1. Normal completion returns 0. `main` calls `os.Exit` at exactly one
+place, so no deferred cleanup is skipped.
 
 **Rationale**: `signal.NotifyContext` is stdlib and removes the need to manage a signal channel
 by hand. Keeping it out of the interval package means interval tests cancel a context directly —

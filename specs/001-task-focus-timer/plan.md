@@ -82,7 +82,7 @@ specs/001-task-focus-timer/
 
 ```text
 cmd/pomotask/
-├── main.go              # Resolves the default path, calls run, exits once
+├── main.go              # main is os.Exit(cli()); cli holds path, signal ctx, and the run call
 └── main_test.go         # Drives run end to end; carries the ADR 0001 behavioral check
 
 internal/task/
@@ -111,11 +111,40 @@ task data, which is easiest to guarantee when it cannot reach it.
 The template's `src/models`, `src/services`, `src/cli` layout is not used; it is not the Go
 convention and would place the persistence boundary somewhere depguard cannot cleanly address.
 
-**`main` is a wrapper around a testable `run`.** `func main()` resolves the default data path,
-calls `run(args []string, dataPath string, stdout, stderr io.Writer) int`, and passes the
-returned code to `os.Exit` at the single exit point. Everything else — dispatch, load, domain
-operation, save, message text, exit status — lives inside `run`, which a test can call directly
-with `t.TempDir()` and captured buffers.
+**`main` is a wrapper around a testable `run`.** `func main()` is one line, `os.Exit(cli())`.
+`cli` holds the process concerns — resolving the default data path, building an interrupt
+context with `signal.NotifyContext` and deferring its stop function, and calling
+
+```go
+run(ctx context.Context, args []string, dataPath string, tick time.Duration, stdout, stderr io.Writer) int
+```
+
+with `time.Minute` as the tick. The split exists because `os.Exit` runs no deferred function,
+so a `defer stop()` written beside it would never execute; returning a code from `cli` lets its
+defers run while keeping `os.Exit` at one place. Everything else — dispatch, load, domain
+operation, save, message text, exit status —
+lives inside `run`, which a test calls directly with `t.TempDir()`, a compressed tick, its own
+cancellable context, and captured buffers.
+
+**Why the context and the tick are parameters rather than internals.** FR-016 names two seams
+and these are they. Parts of FR-012, FR-013, SC-007, and SC-008 are command-level: the report
+sequence reaching the writer the command was handed, and the exit status on completion and on
+interruption. A package-level test produces no exit status at all, so neither can be reached
+from inside `internal/focus`.
+
+The tick is the timing seam: total length derives from it, so compressing one compresses both.
+The context is the cancellation seam: were `run` to build its own signal context, a test would
+have only one way to cancel it — delivering a signal to the test process, which is not
+deterministic and which the interval's own tests deliberately avoid. The cancelled half of
+SC-008 would have no automated coverage. Passing the context in makes cancellation an ordinary
+function call.
+
+SC-004 needs no seam and gets none. Compressing an interval removes the wall-clock property
+SC-004 asserts, so it is checked against the production configuration in the manual run.
+
+Neither parameter is reachable through any user-facing surface; `main` sets both to fixed
+values. FR-011 is unaffected — this is the internal seam FR-016 explicitly permits. Signal
+handling exists in exactly one place, `main`, and `run` never learns why it was cancelled.
 
 This is what makes ADR 0001's behavioral check the check the ADR actually describes. That check
 must invoke "the add-task path", not the storage package: a test that calls `storage.Save`

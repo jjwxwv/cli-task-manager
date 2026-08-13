@@ -249,6 +249,31 @@ and corrected:
 
     How the seam is built remains a planning decision; FR-016 states only what it must satisfy.
 
+### FR-016 corrected during cross-artifact analysis
+
+A `/speckit-analyze` pass after tasks were generated found FR-016 asserting something no
+implementation could deliver, and re-validated the checklist after the fix. All sixteen items
+still pass; no checkbox changed state.
+
+14. **FR-016 claimed SC-004 was verifiable at speed.** It required the system be verifiable
+    against "FR-012, SC-004, and SC-007 without a test waiting out the full 25 minutes", while
+    plan.md and the task list both state the opposite — that SC-004's one-second accuracy is
+    the one property a compressed interval cannot show, and is checked manually. The same
+    requirement then used SC-004 in the contrary sense, as the check that "continued to pass"
+    while a bad seam hid a defect. A requirement cannot both demand a property be verified at
+    speed and cite it as the thing that passes spuriously.
+    *Resolved*: SC-004 is removed from the list, with a paragraph stating why — compression
+    removes the wall-clock property SC-004 asserts, so no seam can serve it. It is verified
+    against the production configuration instead.
+
+15. **FR-016 did not authorize the cancellation seam the design relies on.** Its scope named
+    only FR-012, SC-004, and SC-007, but making the interrupted half of SC-008 testable requires
+    a second seam — a cancellable context the test holds — which nothing in the specification
+    permitted. Under Principle III that is a design element traceable to neither a requirement
+    nor an ADR.
+    *Resolved*: FR-016 now describes two seams explicitly, the timing seam and the cancellation
+    seam, and names FR-013 and SC-008 alongside FR-012 and SC-007.
+
 ### Exit condition
 
 Met. No clarification markers remain and all sixteen items pass. The spec is ready for

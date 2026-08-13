@@ -170,13 +170,26 @@ signals its end. Requires no recorded tasks.
 
 **Verifiability**
 
-- **FR-016**: System MUST be verifiable against FR-012, SC-004, and SC-007 without a test
-  waiting out the full 25 minutes. Any internal seam serving that purpose MUST drive the
-  interval's duration and its reporting cadence from one source, so that compressing the
-  duration compresses the cadence with it. A seam that shortened only the duration would leave
-  a compressed interval still reporting once per real minute, exhibiting neither the sequence
-  FR-012 describes nor the count SC-007 fixes, while SC-004 continued to pass. The seam is
-  internal and MUST NOT be reachable through the user-facing surface FR-011 bounds.
+- **FR-016**: System MUST be verifiable against FR-012, FR-013, SC-007, and SC-008 without a
+  test waiting out the full 25 minutes and without a test interrupting its own process. Two
+  internal seams serve this, and neither MUST be reachable through the user-facing surface
+  FR-011 bounds.
+
+  The first governs timing. The interval's duration and its reporting cadence MUST be driven
+  from one source, so that compressing the duration compresses the cadence with it. A seam
+  that shortened only the duration would leave a compressed interval still reporting once per
+  real minute, exhibiting neither the sequence FR-012 describes nor the count SC-007 fixes,
+  while a check on total length went on passing.
+
+  The second governs cancellation. An interrupted interval MUST be reachable by cancelling
+  something a test can hold, not only by delivering a signal to the running process. Without
+  it, the interrupted half of FR-013 and the whole of SC-008 could be exercised only by a test
+  signalling itself, which is not deterministic.
+
+  SC-004 is deliberately absent from this list. Its claim is that a real interval lasts 25
+  minutes to within a second, and no compressed run can demonstrate that — compression removes
+  the very property being claimed. SC-004 is verified against the production configuration
+  instead, and requires no seam.
 
 ### Key Entities
 
