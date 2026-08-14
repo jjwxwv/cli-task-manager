@@ -98,7 +98,7 @@ internal/focus/
 └── focus_test.go        # Cancels the context directly; no signals involved
 
 .golangci.yml            # depguard: backends barred in storage; purity in task and focus
-.github/workflows/ci.yml # gofmt, go vet, golangci-lint, go test
+.github/workflows/ci.yml # gofmt, go vet, golangci-lint, go test — matrix over all three OSes
 ```
 
 **Structure Decision**: A single Go module laid out conventionally — `cmd/` for the entry point,
@@ -163,7 +163,7 @@ Constitution requirements, and what satisfies each:
 |-------------|--------------|
 | Automated coverage for every testable spec behavior | Unit tests per package, mapped to FRs; CLI-level tests for exit statuses and stream discipline (SC-005, SC-008) |
 | Persistence tests isolated from real user data | `t.TempDir()` throughout `internal/storage`; the path is a parameter, so no test can reach the real file even by accident (research.md R1) |
-| Architectural constraints verified by CI, not review | `.golangci.yml` and the workflow, both run on every push. The workflow must test `gofmt -l` by its **output**, not its exit code — `gofmt -l` exits zero even when it names unformatted files, so a naive `&&` chain would report a clean build over unformatted code |
+| Architectural constraints verified by CI, not review | `.golangci.yml` and the workflow, both run on every push, across a Windows, Linux, and macOS matrix — the Target Platform above claims three platforms, and `os.UserConfigDir()`, `os.Rename` atomicity, and the unwritable-path case all differ among them. The workflow must test `gofmt -l` by its **output**, not its exit code — `gofmt -l` exits zero even when it names unformatted files, so a naive `&&` chain would report a clean build over unformatted code. Go and `golangci-lint` are pinned to the versions fixed locally, since an unpinned linter can land on the other config schema and fail to parse |
 | Dependency restriction enforced with depguard | Two rules, described below |
 | Approved JSON path verified behaviorally | A test in `cmd/pomotask/main_test.go` entering through `run` against a temporary directory and decoding the resulting file into a document carrying `schema_version` and `tasks` |
 | SC-001 — confirmation in under one second | The same `run`-level add test asserts the call returns within one second against a warm temporary directory |

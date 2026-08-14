@@ -172,7 +172,7 @@ signals its end. Requires no recorded tasks.
 
 - **FR-016**: System MUST be verifiable against FR-012, FR-013, SC-007, and SC-008 without a
   test waiting out the full 25 minutes and without a test interrupting its own process. Two
-  internal seams serve this, and neither MUST be reachable through the user-facing surface
+  internal seams serve this, and both MUST be unreachable through the user-facing surface
   FR-011 bounds.
 
   The first governs timing. The interval's duration and its reporting cadence MUST be driven

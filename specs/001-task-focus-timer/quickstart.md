@@ -15,8 +15,10 @@ and Linux it is `pomotask`.
 ## Prerequisites
 
 - Go 1.26 or later — `go version`
-- `golangci-lint` on `PATH` — not needed to run the tool, needed for the quality gate.
-  Installing it is a setup task in `tasks.md`, not a step here.
+- `golangci-lint` on `PATH`, at the version pinned in `.github/workflows/ci.yml` — not needed
+  to run the tool, needed for the quality gate. The workflow is the single place that version
+  lives; matching it locally is what keeps a config written for one config schema from failing
+  to parse under the other. Installing it is a setup task in `tasks.md`, not a step here.
 
 ---
 

@@ -122,5 +122,8 @@ The interval is not an entity and nothing about it is persisted. It exists for t
 command that runs it. FR-014 forbids it from reading or writing task data at all, which is what
 lets User Story 3 be tested without any task fixture.
 
-Its one parameter is the tick duration; the total length is derived as `25 × tick`. That the
-total is derived rather than supplied is what satisfies FR-016 — see research.md R6.
+Its one duration parameter is the tick; the total length is derived as `25 × tick`. That the
+total is derived rather than supplied is what satisfies FR-016's timing seam — see research.md
+R6. The interval also accepts a `context.Context`. That is one half of FR-016's cancellation
+seam; the other half is the context `run` accepts, and SC-008 depends on that one, since an exit
+status exists only at the command level. See research.md R7.
