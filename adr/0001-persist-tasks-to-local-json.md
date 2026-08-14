@@ -93,6 +93,17 @@ The positive invariant is that the running application actually persists through
 
 Any future change of persistence strategy must therefore first be documented by a superseding ADR, since the build will otherwise reject it.
 
+#### Note on the allowlist's exact contents
+
+*Recorded 2026-08-14, during implementation of `001-task-focus-timer`, with the developer's approval. This note records what the allowlist admits; it does not alter the decision above, which is unchanged.*
+
+The paragraph above describes the allowlist as permitting only the Go standard library (`$gostd`). As configured in `.golangci.yml` it admits two first-party module paths in addition. A reviewer diffing this ADR against that file would otherwise find the divergence with no reason attached, so the reason is recorded here rather than only in a code comment:
+
+- **`pomotask/internal/task`** — the persistence package converts to and from the domain type at its own boundary, which is what keeps `encoding/json` out of the domain package as the Decision above requires. Converting to a type means importing it. Read literally, the `$gostd`-only allowlist and the prohibition on domain logic importing `encoding/json` cannot both be satisfied by any design in which the persistence package persists *tasks*; one of the two has to give, and this is the side that gives. A first-party domain package carrying no persistence of its own is not an alternative backend, so the invariant this allowlist exists to hold is untouched.
+- **`pomotask/internal/storage`** — the persistence package's external test package (`storage_test`) lives in the same directory, so the rule's file scope covers it, and it must be able to import the package it tests.
+
+Every deny entry named in the paragraph above remains in force, and each category is confirmed to reject by a provocation recorded in `specs/001-task-focus-timer/quickstart.md`. The departure is recorded as **G6** in the Gap register in `specs/001-task-focus-timer/plan.md`, which is where a reviewer reading the plan before the config will meet it. It is the developer's to overturn: the alternative is to move the conversion out to `cmd/pomotask` and have the persistence package expose its own record type, which restores the literal `$gostd`-only allowlist at the cost of placing the boundary conversion outside the package that owns the boundary.
+
 ### Review
 
 Independently of any trigger below, review this ADR one month after implementation, comparing its recorded assumptions against observed usage — actual dataset size, measured command latency, and whether concurrent access occurred in practice.

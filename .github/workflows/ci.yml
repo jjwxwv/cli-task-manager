@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # plan.md claims Windows, macOS, and Linux. Three things in this design
+    # differ by platform: os.UserConfigDir resolves elsewhere, os.Rename carries
+    # different atomicity guarantees, and the unwritable-destination test relies
+    # on renaming onto a directory failing everywhere. A single runner would
+    # leave the development platform, Windows, unverified.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Pinned to the go directive in go.mod (T001).
+          go-version: "1.26"
+
+      # gofmt -l exits zero whether or not it names unformatted files: it
+      # reports by printing, not by its status. Testing the output rather than
+      # the exit code is what keeps a chained check from passing a build with
+      # unformatted code in it.
+      - name: gofmt
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "unformatted files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        shell: bash
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          # Pinned to the version established locally in T003. .golangci.yml is
+          # written in schema v2, which schema v1 binaries cannot parse, so an
+          # unpinned linter would relocate that hazard into CI rather than
+          # remove it. This is the single place the version lives.
+          version: v2.12.2
+
+      - name: go test
+        shell: bash
+        run: go test ./...
+
+      # One step the local gate does not have, and deliberately so.
+      #
+      # The race detector needs cgo and therefore a C compiler. The development
+      # machine is Windows with none installed, where `go test -race` reports
+      # `-race requires cgo` and checks nothing; the Linux runner ships one, so
+      # the check costs a step and no setup. What makes it worth running is
+      # FR-016's cancellation seam, which is what puts concurrency in the test
+      # surface at all — not any Constitution requirement. See research.md R11,
+      # and quickstart.md, which declares the asymmetry rather than leaving it
+      # to be discovered on a red build.
+      - name: go test -race
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...

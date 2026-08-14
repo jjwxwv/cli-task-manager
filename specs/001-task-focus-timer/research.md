@@ -238,6 +238,50 @@ CLI convention and keeps failure text out of piped output. Recorded as a choice.
 
 ---
 
+## R11. The race detector runs in CI and not in the local gate
+
+**Authority**: none directly. This is a convention, recorded here the way R10 records failure
+messages on stderr, so that a later reader takes it as a free choice rather than as a
+requirement being satisfied.
+
+It is explicitly **not** a Constitution item. The Constitution's completion gate names `gofmt`,
+`go vet`, `golangci-lint`, and the full test suite, and stops there. Adding the race detector
+closes no gate that was open, and removing it would leave the Constitution satisfied.
+
+**What warrants it is FR-016's second seam.** The cancellation seam requires that an interrupted
+interval be reachable by cancelling something a test can hold. A test that holds a context and
+cancels it while the interval runs is, by construction, a concurrent test: it drives the interval
+from one goroutine and cancels from another, and the bounded helpers that keep a lost tick from
+hanging the suite add a third. None of that concurrency exists in the shipped command, which is
+one sequential short-lived process. It exists in the test surface, and it exists there because
+FR-016 put it there. The race detector checks the thing the seam introduced, which is the whole
+of its claim here.
+
+**Decision**: run `go test -race ./...` as a CI step on the Linux runner only. The local gate
+stays exactly as the Constitution states it.
+
+**Rationale**: the detector requires cgo and therefore a C compiler. The development machine —
+Windows, per plan.md Target Platform — has none, so `go test -race` there fails with
+`-race requires cgo` and reports nothing about the code. The Linux runner already ships a
+compiler, so the check costs one step and no setup on any developer machine.
+
+**Consequence, recorded rather than smoothed over**: the local gate and CI are no longer the same
+set of checks. A commit that passes everything quickstart.md lists can still go red in CI, on a
+step the developer had no way to run first. That asymmetry is accepted, not overlooked. The
+alternative — requiring a C toolchain on every development machine so the two stay identical — is
+a setup cost paid everywhere for a check a runner performs for nothing. quickstart.md names the
+step and this reason where it lists the gate, so the extra check is declared rather than left to
+be discovered on a failing build.
+
+**Alternatives considered**:
+
+- Add `-race` to the local gate as well. Rejected: it fails on the development platform for want
+  of a compiler, which turns the gate from a check into a prerequisite.
+- Run it on all three matrix runners. Rejected under Principle V — a data race is a property of
+  the code, not of the operating system, and one runner exercising it is what the choice needs.
+
+---
+
 ## Open items carried into implementation
 
 None. No `NEEDS CLARIFICATION` remains in the Technical Context, and both decisions ADR 0001

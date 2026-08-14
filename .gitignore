@@ -1,0 +1,22 @@
+# Go build output
+/pomotask
+/pomotask.exe
+*.exe
+*.test
+*.out
+
+# Coverage
+coverage.out
+coverage.html
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+
+# Environment
+.env
+.env.*

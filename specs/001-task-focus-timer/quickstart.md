@@ -50,6 +50,23 @@ not by its status. Chaining it with `&&` would therefore pass a build with unfor
 it. The forms above test its output rather than its exit code. Anything the same trap applies
 to in CI must be written the same way.
 
+### One check CI runs that this gate does not
+
+The gate above is the full one the Constitution requires and is complete as such. CI runs one
+further step that it does not: `go test -race ./...`, on the Linux runner only.
+
+The race detector needs cgo and therefore a C compiler. The development machine is Windows with
+none installed, where `go test -race` reports `-race requires cgo` and checks nothing at all.
+Rather than make a C toolchain a prerequisite for running the gate, the step lives on a runner
+that already has one. Why it is worth running is [research.md](research.md) R11 — FR-016's
+cancellation seam is what puts concurrency in the test surface — and it is a convention rather
+than anything the Constitution asks for.
+
+**The two are therefore not the same set of checks.** A commit that passes everything above can
+still fail in CI, on a step you could not have run first. That is expected rather than a fault
+in either. If CI reports a data race, reproduce it on Linux or on a machine carrying a C
+compiler; nothing in the local gate as written will show it to you.
+
 ### Confirming the architectural checks actually bite
 
 A dependency rule that has never failed is a rule nobody has tested. There are **two** depguard

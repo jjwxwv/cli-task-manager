@@ -210,6 +210,14 @@ SC-007's count of 25 reports and FR-012's sequence are tested through the tick s
 one-second accuracy is checked against the production tick in the manual quickstart run, since
 that is the one property a compressed interval cannot demonstrate.
 
+CI carries one step this table does not require: `go test -race ./...`, on the Linux runner
+alone. It closes no Constitution gate — the gate is the four checks above — and rests on
+FR-016's cancellation seam, which is what puts concurrency in the test surface at all. It runs
+only in CI because the detector needs a C compiler the development machine does not have, so the
+local gate and CI are knowingly not the same set of checks. Recorded with its reasoning and its
+cost in research.md R11, and declared in quickstart.md so it is not a gate discovered on a red
+build.
+
 SC-001's one-second bound is asserted at the `run` level rather than measured precisely. Machine
 and CI timing vary too much for a sub-second assertion to mean anything exact; what the check
 does catch is a regression that changes the order of magnitude — a stray sleep, a retry loop, or
@@ -219,9 +227,12 @@ benchmark.
 ## Gap register
 
 Constitution Principle III requires surfacing choices that neither the specification nor an
-Accepted ADR authorizes, rather than deciding them silently. Five qualify. All are recorded in
+Accepted ADR authorizes, rather than deciding them silently. Six qualify. All are recorded in
 the artifacts that depend on them and none blocks implementation, but each is the developer's to
 overturn.
+
+G1 through G5 were identified during planning. G6 surfaced during implementation, when the
+depguard configuration had to be written against a real package graph rather than described.
 
 | # | Choice made | Why it is a gap | Where it lives |
 |---|-------------|-----------------|----------------|
@@ -230,11 +241,23 @@ overturn.
 | G3 | Interruption exits `1` rather than the shell convention `130` | SC-008 requires only that completion and interruption be distinguishable. Nothing selects a particular value | [research.md](research.md) R7 |
 | G4 | `pomotask add` takes exactly one argument; the remainder is not joined | FR-001 requires the text be supplied "in a single command" and says nothing about argument count. Requiring one argument makes the contract crisp, and its failure message prints the quoting form rather than a generic usage line, but it rejects `pomotask add write the report`, which many users will type first. Joining the remainder would accept it, at the cost of a looser contract and of `add` silently normalizing runs of spaces | [contracts/cli.md](contracts/cli.md) |
 | G5 | An interrupted interval prints to stdout and is not counted as an SC-005 failure, despite exiting non-zero | SC-005 binds "every operation the system rejects or cannot complete", and an interrupted interval did not complete — so it arguably falls inside, which would put the message on stderr alongside every other non-zero exit. The contract instead reads interruption as the user getting what they asked for rather than a fault, and routes it to stdout. Nothing in the spec settles which reading is right. The cost of the choice is that "non-zero implies stderr" stops being a rule a test can assert uniformly | [contracts/cli.md](contracts/cli.md) |
+| G6 | depguard rule 1's allowlist admits `pomotask/internal/task` and `pomotask/internal/storage` alongside `$gostd` | ADR 0001's Enforcement section states the allowlist permits only `$gostd` within the persistence package. Read literally that forbids the very import the same ADR's Decision forces: keeping `encoding/json` out of the domain means the persistence package owns the conversion, and converting to the domain type means importing it. The two clauses cannot both hold as written for any design in which the persistence package persists tasks, and this is the side that gives. Opening two first-party paths introduces no alternative backend, so the invariant the rule enforces stands; the departure is from the ADR's wording, and nothing authorized it in advance. The second path is the external test package `storage_test`, which shares the directory and so falls inside the rule's file scope | [adr/0001-persist-tasks-to-local-json.md](../../adr/0001-persist-tasks-to-local-json.md), Enforcement → "Note on the allowlist's exact contents"; [.golangci.yml](../../.golangci.yml) |
+
+**Why G6 is recorded in three places rather than one.** A code comment in `.golangci.yml` sits
+where nobody reading the documents will pass it, so a reviewer diffing the ADR's text against
+the configuration would meet the divergence with no reason attached. The note lives in the ADR
+because that is the document being departed from, and here because the Gap register is what a
+reviewer reads before the configuration.
 
 Two further choices rest on convention rather than requirement and are recorded at their point
 of use rather than here: failure messages on stderr (research.md R10), and storing task data
 under `os.UserConfigDir()` despite tasks being data rather than configuration (research.md R1,
 including why the semantically better alternative was rejected).
+
+A third belongs with them and is likewise recorded at its point of use: running the race
+detector in CI but not in the local gate (research.md R11, including the authority chain, which
+runs through FR-016's cancellation seam rather than through the Constitution, and the accepted
+asymmetry between the two check sets).
 
 ## Phase status
 

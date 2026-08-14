@@ -1,0 +1,106 @@
+# golangci-lint configuration, schema v2 (golangci-lint 2.x — the version is
+# pinned in .github/workflows/ci.yml, which is the single place it lives).
+#
+# Two architectural rules are enforced here rather than by review, as the
+# Constitution requires. Rule 1 keeps alternative persistence backends out of
+# internal/storage. Rule 2 keeps serialization, the filesystem, task data, and
+# signal handling out of the domain packages. They are separate rules because
+# they are scoped to different packages: a domain package importing
+# encoding/json introduces no alternative backend and would pass rule 1
+# untouched.
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        # Rule 1 — no alternative persistence backend (ADR 0001 Enforcement).
+        # An allowlist rather than a blocklist, so that every dependency path
+        # not explicitly opened stays closed.
+        #
+        # ADR 0001 states this allowlist permits only $gostd. It admits two
+        # first-party paths besides, which is a deliberate departure recorded
+        # where a reviewer will meet it rather than only here: ADR 0001's
+        # Enforcement section, under "Note on the allowlist's exact contents",
+        # and G6 in the Gap register in specs/001-task-focus-timer/plan.md.
+        persistence-backends:
+          files:
+            - "**/internal/storage/**"
+          allow:
+            - $gostd
+            - pomotask/internal/task
+            # store_test.go is an external test package (storage_test) living in
+            # this directory, so the rule covers it and it must be allowed to
+            # import the package it tests.
+            - pomotask/internal/storage
+          deny:
+            - pkg: database/sql
+              desc: "ADR 0001 accepts a single local JSON file written with encoding/json and os; no database engine is part of the approved persistence architecture."
+            - pkg: github.com/mattn/go-sqlite3
+              desc: "ADR 0001 rejects SQLite: its Go drivers are either cgo-based or third-party, and both give up the standard-library-only persistence constraint."
+            - pkg: modernc.org/sqlite
+              desc: "ADR 0001 rejects SQLite: its Go drivers are either cgo-based or third-party, and both give up the standard-library-only persistence constraint."
+            - pkg: github.com/glebarez/sqlite
+              desc: "ADR 0001 rejects SQLite: its Go drivers are either cgo-based or third-party, and both give up the standard-library-only persistence constraint."
+            - pkg: gorm.io/gorm
+              desc: "ADR 0001 excludes ORMs from the approved persistence architecture."
+            - pkg: entgo.io/ent
+              desc: "ADR 0001 excludes ORMs from the approved persistence architecture."
+            - pkg: github.com/jmoiron/sqlx
+              desc: "ADR 0001 excludes database access layers from the approved persistence architecture."
+            - pkg: go.etcd.io/bbolt
+              desc: "ADR 0001 excludes key-value stores from the approved persistence architecture."
+            - pkg: github.com/dgraph-io/badger
+              desc: "ADR 0001 excludes key-value stores from the approved persistence architecture."
+            - pkg: github.com/syndtr/goleveldb
+              desc: "ADR 0001 excludes key-value stores from the approved persistence architecture."
+            - pkg: github.com/aws/aws-sdk-go
+              desc: "ADR 0001 excludes remote storage services from the approved persistence architecture; task data is a single local file."
+            - pkg: github.com/aws/aws-sdk-go-v2
+              desc: "ADR 0001 excludes remote storage services from the approved persistence architecture; task data is a single local file."
+            - pkg: cloud.google.com/go/storage
+              desc: "ADR 0001 excludes remote storage services from the approved persistence architecture; task data is a single local file."
+            - pkg: github.com/Azure/azure-sdk-for-go
+              desc: "ADR 0001 excludes remote storage services from the approved persistence architecture; task data is a single local file."
+
+        # Rule 2 — domain purity, in internal/task and internal/focus alike
+        # (ADR 0001 Decision; Constitution Principle II).
+        #
+        # Written as one entry per package rather than one entry naming both.
+        # depguard applies a single list to any given file, so a shared entry
+        # plus a focus-only entry would have the shared one win and report the
+        # focus denials under the wrong description.
+        domain-purity-task:
+          files:
+            - "**/internal/task/**"
+          deny:
+            - pkg: encoding/json
+              desc: "ADR 0001 confines serialization to internal/storage; domain logic must not import encoding/json."
+            - pkg: os
+              desc: "ADR 0001 forbids domain logic from performing filesystem operations directly; internal/storage is the only package that touches the filesystem."
+            - pkg: io/fs
+              desc: "ADR 0001 forbids domain logic from performing filesystem operations directly; internal/storage is the only package that touches the filesystem."
+            - pkg: path/filepath
+              desc: "ADR 0001 forbids domain logic from performing filesystem operations directly; internal/storage is the only package that touches the filesystem."
+
+        # The same four denials in internal/focus, plus the two that apply to
+        # the interval alone.
+        domain-purity-focus:
+          files:
+            - "**/internal/focus/**"
+          deny:
+            - pkg: encoding/json
+              desc: "ADR 0001 confines serialization to internal/storage; domain logic must not import encoding/json."
+            - pkg: os/signal
+              desc: "Signal handling belongs to cmd/pomotask alone (research.md R7); the interval ends when the context it was given is cancelled and never learns why."
+            - pkg: os
+              desc: "ADR 0001 forbids domain logic from performing filesystem operations directly; internal/storage is the only package that touches the filesystem."
+            - pkg: io/fs
+              desc: "ADR 0001 forbids domain logic from performing filesystem operations directly; internal/storage is the only package that touches the filesystem."
+            - pkg: path/filepath
+              desc: "ADR 0001 forbids domain logic from performing filesystem operations directly; internal/storage is the only package that touches the filesystem."
+            - pkg: pomotask/internal/storage
+              desc: "FR-014 requires the focus interval to neither read nor modify task data; denying it the persistence package makes that a build error rather than a promise."
