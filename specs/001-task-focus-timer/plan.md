@@ -86,20 +86,33 @@ cmd/pomotask/
 └── main_test.go         # Drives run end to end; carries the ADR 0001 behavioral check
 
 internal/task/
+├── doc.go               # Package comment; created by T002 so depguard had a package to bind to
 ├── task.go              # Task type; Add and Complete as pure functions
 └── task_test.go
 
 internal/storage/
+├── doc.go               # Package comment; same origin as the others
 ├── store.go             # Load and save; the only importer of encoding/json
 └── store_test.go        # Uses t.TempDir()
 
 internal/focus/
+├── doc.go               # Package comment; same origin as the others
 ├── focus.go             # Interval driven by a tick duration and a context; total = 25 × tick
 └── focus_test.go        # Cancels the context directly; no signals involved
 
+README.md                # The three commands, the data file's location per platform, and what
+                         # the tool is not — no breaks, no cycles, no history
+.gitattributes           # Every text file checks out LF, so the CI gofmt step does not fail on
+                         # Windows for line endings alone
 .golangci.yml            # depguard: backends barred in storage; purity in task and focus
-.github/workflows/ci.yml # gofmt, go vet, golangci-lint, go test — matrix over all three OSes
+.github/workflows/ci.yml # gofmt, go vet, golangci-lint, go test — matrix over all three OSes,
+                         # plus go test -race on the Linux runner alone
 ```
+
+The three `doc.go` files exist because Go recognizes no directory as a package until it holds at
+least one `.go` file, and T002 needed all three packages to exist before `.golangci.yml` was
+written — depguard rules scoped to packages that do not yet exist bind to nothing and pass
+vacuously. They now carry each package's doc comment, which is where Go convention puts it.
 
 **Structure Decision**: A single Go module laid out conventionally — `cmd/` for the entry point,
 `internal/` for packages that are not a public API. The three internal packages are not an
@@ -203,6 +216,29 @@ ADR 0001 requires both a negative and a positive check and treats neither as a s
 the other. The rules above are the negative half: they prove no prohibited dependency was
 introduced. The behavioral check is the positive half: it proves the approved path is the one
 actually taken. A build can satisfy every dependency rule while never writing a file at all.
+
+#### How rule 2 is configured: two entries, not one
+
+*Recorded during implementation, and the reason is empirical rather than stylistic.*
+
+Rule 2 is one rule in the sense that matters here — one constraint, the same four denials in
+both domain packages — but `.golangci.yml` carries it as **two** depguard entries,
+`domain-purity-task` and `domain-purity-focus`, alongside `persistence-backends`. Three named
+lists implement the two rules described above.
+
+The reason is that **depguard applies a single list to any given file**. Written the obvious way
+— one shared entry naming both packages, plus a focus-only entry carrying the two extra denials —
+the shared entry wins for every file in `internal/focus`, and the focus-only entry never fires.
+An `os/signal` import there was then reported under rule 2's *filesystem* description, because
+`os` is a prefix of `os/signal` and the shared list is the one being consulted. The rule still
+rejected the import; it named the wrong reason for rejecting it, which defeats the point of
+attaching a description at all. Writing one entry per package, with the focus entry carrying all
+six denials, puts each denial under its own description. T041's provocation is what confirms it:
+`os/signal` in `internal/focus` now reports signal containment rather than filesystem access.
+
+A reviewer counting entries in the configuration against "two rules" here would otherwise find a
+discrepancy with no reason attached — the same failure mode G6 in the Gap register exists to
+close.
 
 ### Coverage of the timing criteria
 

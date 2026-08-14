@@ -1,0 +1,20 @@
+# Every tracked text file checks out with LF on every platform.
+#
+# Without this, a clone on Windows with core.autocrlf=true — the default that
+# Git for Windows installs, and what is set globally and system-wide on the
+# development machine — writes CRLF into the working tree. `gofmt -l` then names
+# every .go file as unformatted, because gofmt's output is LF and it reports by
+# comparison rather than by parsing.
+#
+# That is not a cosmetic failure. The gofmt check is the first step in the CI
+# job, so the windows-latest leg of the matrix would die there on every commit
+# while Linux and macOS passed. plan.md justifies three runners on the grounds
+# that a single one "would leave the developer's own platform, Windows,
+# unverified" — and a leg that never reaches `go vet`, `golangci-lint`, or the
+# tests leaves exactly that platform unverified, while reporting a failure that
+# says nothing about the code (plan.md Verification strategy and CI matrix
+# rationale; T006, T052).
+#
+# The stored blobs are already LF, so this governs only what checkout writes.
+# No renormalising commit is required.
+* text=auto eol=lf

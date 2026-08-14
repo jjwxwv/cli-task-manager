@@ -221,6 +221,31 @@ along with the duration and produces the identical 25-line sequence in milliseco
 run confirms the production tick is genuinely one minute — the one thing the compressed test
 cannot show.
 
+### SC-004, as measured
+
+Recorded here because a checked box in `tasks.md` is otherwise the only evidence that the one
+criterion no automated run will re-establish was ever established at all.
+
+| | |
+|---|---|
+| Date | 2026-08-14 |
+| Platform | Windows 11, `go1.26.5 windows/amd64` |
+| Elapsed | **1500.194 s** — 25 min + 0.194 s, inside SC-004's one-second tolerance |
+| Output | 26 lines: 25 remaining-time reports, 25 down to 1, then `Focus interval complete.` |
+| stderr | empty |
+| Exit status | `0` |
+
+Two automated guards were added alongside this measurement, and neither replaces it: a test
+asserting `productionTick == time.Minute` and one asserting `focus.Ticks == 25`. Together those
+are what SC-004 reduces to *given a working timer*, and they catch the regression this manual run
+would otherwise be the only defence against — a changed constant, which would leave the whole
+suite green while the shipped interval ran for the wrong length. What they cannot do is
+demonstrate the wall-clock property itself, which is why this run exists and why plan.md gives
+SC-004 no seam.
+
+Re-run this whenever `productionTick`, `focus.Ticks`, or the interval's timing mechanism changes.
+Nothing in CI will tell you it is stale.
+
 ---
 
 ## Inspecting stored data

@@ -56,6 +56,20 @@ func runBounded(t *testing.T, ctx context.Context, tick time.Duration, out io.Wr
 	}
 }
 
+// T049 — the interval is twenty-five ticks long.
+//
+// Every other test in this file is written against focus.Ticks rather than
+// against the literal 25, which is what lets them stay correct if the constant
+// moves — and is exactly why none of them would notice it moving. FR-010 fixes
+// the count at 25 and SC-007 fixes the report sequence to match, so the
+// constant is pinned here, once, against the requirement rather than against
+// itself (FR-010, SC-007).
+func TestIntervalIsTwentyFiveTicks(t *testing.T) {
+	if focus.Ticks != 25 {
+		t.Errorf("focus.Ticks = %d, want 25", focus.Ticks)
+	}
+}
+
 // T032 — a completed interval emits exactly 25 remaining-time reports, the
 // first showing 25 and the last showing 1, none showing zero, followed by
 // exactly one completion line (SC-007, FR-012).

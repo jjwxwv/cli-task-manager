@@ -2,8 +2,28 @@ package task
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 )
+
+// outcomeName renders an Outcome for a failure message.
+//
+// It lives here rather than as a String method on the type. Nothing in the
+// specification or in ADR 0001 asks the domain package to format its own
+// values, and Principle V admits no surface that traces to neither; the only
+// caller this ever had was a failing assertion in this file (T051).
+func outcomeName(o Outcome) string {
+	switch o {
+	case Changed:
+		return "Changed"
+	case AlreadyComplete:
+		return "AlreadyComplete"
+	case NotFound:
+		return "NotFound"
+	default:
+		return "Outcome(" + strconv.Itoa(int(o)) + ")"
+	}
+}
 
 // T013 — Add assigns an identifier one greater than the largest present,
 // starting at 1 (FR-006; research.md R3).
@@ -132,7 +152,7 @@ func TestCompleteOutcomes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, outcome := Complete(tc.tasks, tc.id)
 			if outcome != tc.want {
-				t.Fatalf("outcome = %v, want %v", outcome, tc.want)
+				t.Fatalf("outcome = %s, want %s", outcomeName(outcome), outcomeName(tc.want))
 			}
 
 			switch tc.want {
@@ -160,15 +180,17 @@ func TestCompleteOutcomes(t *testing.T) {
 // T026 — the three outcomes are three distinct values, which is what stops the
 // caller collapsing "already complete" into "not found" or into success.
 func TestOutcomesAreDistinct(t *testing.T) {
+	all := []Outcome{Changed, AlreadyComplete, NotFound}
+
 	seen := map[Outcome]string{}
-	for _, o := range []Outcome{Changed, AlreadyComplete, NotFound} {
+	for _, o := range all {
 		if other, ok := seen[o]; ok {
-			t.Errorf("%s and %s are the same value", other, o)
+			t.Errorf("%s and %s are the same value, %d", other, outcomeName(o), int(o))
 		}
-		seen[o] = o.String()
+		seen[o] = outcomeName(o)
 	}
-	if len(seen) != 3 {
-		t.Errorf("got %d distinct outcomes, want 3", len(seen))
+	if len(seen) != len(all) {
+		t.Errorf("got %d distinct outcomes, want %d", len(seen), len(all))
 	}
 }
 

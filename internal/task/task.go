@@ -2,7 +2,6 @@ package task
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 )
 
@@ -41,19 +40,10 @@ const (
 	NotFound
 )
 
-// String returns the outcome's name, for test failure messages and debugging.
-func (o Outcome) String() string {
-	switch o {
-	case Changed:
-		return "Changed"
-	case AlreadyComplete:
-		return "AlreadyComplete"
-	case NotFound:
-		return "NotFound"
-	default:
-		return "Outcome(" + strconv.Itoa(int(o)) + ")"
-	}
-}
+// Outcome carries no String method. Rendering an outcome as text is something
+// only a failing test ever needed, and Principle V admits no surface that
+// traces to neither a specification requirement nor an Accepted ADR. The
+// formatting lives in the test that wants it (T051).
 
 // Add records a new task carrying text and returns the extended collection
 // along with the task as recorded. The identifier assigned is one greater than

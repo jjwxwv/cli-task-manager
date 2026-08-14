@@ -99,6 +99,25 @@ func TestDefaultDataPath(t *testing.T) {
 	}
 }
 
+// T049 — the production tick is one minute.
+//
+// This does not verify SC-004 and does not pretend to. SC-004 claims a real
+// interval lasts 25 minutes to within a second, and compression removes the
+// wall-clock property being claimed, which is why plan.md gives the criterion
+// no seam and checks it in the manual quickstart run instead.
+//
+// What this catches is the regression that run would otherwise be the only
+// defence against, and it only runs once: changing this constant to
+// time.Second leaves every other test in the suite green — they all pass their
+// own compressed tick — while the shipped interval lasts 25 seconds. Together
+// with focus.Ticks, this is what SC-004 reduces to given a working timer
+// (SC-004, FR-010; quickstart.md "SC-004, as measured").
+func TestProductionTickIsOneMinute(t *testing.T) {
+	if productionTick != time.Minute {
+		t.Errorf("productionTick = %v, want %v", productionTick, time.Minute)
+	}
+}
+
 // T017 — ADR 0001's behavioral check. It enters through run rather than calling
 // the storage package, because a test that calls storage.Save proves the
 // package writes JSON and proves nothing about whether the application reaches
